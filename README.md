@@ -1,161 +1,189 @@
-# Titanic Survival Prediction
+# Airbnb Clustering Analysis
 
 ## Project Overview
 
-This project uses the Titanic dataset to build and evaluate machine learning models that predict whether a passenger survived or did not survive. The target variable is binary:
+This project applies **K-Means clustering** to an Airbnb dataset to group listings with similar characteristics. Instead of predicting a target variable, the goal is to discover natural patterns among Airbnb listings based on location, room type, price, review activity, host listing count, and yearly availability.
 
-- `1` = Survived
-- `0` = Did not survive
+The analysis focuses on understanding how listings can be segmented into different groups, which can support business decisions such as market positioning, pricing strategy, and identifying listing behavior patterns.
 
-The main goal is to compare several classification models and select the most reliable model based on performance, especially the **F1-score for the survived class**.
+## Dataset
 
-## Team
+The dataset contains **48,895 Airbnb listings** with 16 original columns, including listing information, host details, location, room type, price, reviews, and availability.
 
-**Group Name:** The Outliers
+Key variables used for clustering:
 
-| Member | Main Task |
-|---|---|
-| Thanh Hoang | Data exploration and transformation |
-| Nhi Nguyen | KNN, Decision Tree, Naïve Bayes |
-| Davis Nguyen | Linear Regression, Logistic Regression, SVM |
+- `neighbourhood_group`
+- `room_type`
+- `price`
+- `minimum_nights`
+- `number_of_reviews`
+- `reviews_per_month`
+- `calculated_host_listings_count`
+- `availability_365`
 
-## Dataset Understanding
+These features were selected because they describe important listing characteristics such as where the listing is located, what type of accommodation it offers, how expensive it is, how active it is in reviews, how many listings the host manages, and how often the listing is available.
 
-The dataset contains passenger-level information from the Titanic, including:
+## Data Cleaning and Preprocessing
 
-- Demographic information: `Age`, `Sex`
-- Socioeconomic information: `Pclass`, `Fare`
-- Family-related information: `SibSp`, `Parch`
-- Travel information: `Embarked`
-- Target variable: `Survived`
-
-During the exploratory analysis, missing values were found in `Age`, `Cabin`, and `Embarked`. The analysis also showed that some features had clear relationships with survival. In particular, female passengers and passengers in higher classes had higher survival rates.
-
-## Data Preprocessing
-
-Several preprocessing steps were completed before model training:
+The preprocessing process included the following steps:
 
 ### 1. Handling Missing Values
 
-- Missing `Age` values were filled using the median.
-- Missing `Embarked` values were filled using the mode.
-- `Cabin` was dropped because it had too many missing values and limited predictive usefulness.
+The column `reviews_per_month` contained missing values, which were filled with `0`. This is reasonable because listings with no recorded reviews likely have no monthly review activity.
+
+Other missing columns such as `name`, `host_name`, and `last_review` were not used in the clustering model.
 
 ### 2. Feature Selection
 
-Columns with limited predictive value or data quality issues were removed:
+Only clustering-relevant columns were selected. Identification columns and text-based columns were excluded because they do not directly help measure similarity between listings.
 
-- `Name`
-- `PassengerId`
-- `Ticket`
-- `Cabin`
+### 3. Outlier Removal
 
-The remaining features were used to train the models.
+Extreme outliers were found in several numerical variables, especially:
 
-### 3. Encoding Categorical Variables
+- `price`
+- `minimum_nights`
+- `number_of_reviews`
+- `reviews_per_month`
+- `calculated_host_listings_count`
 
-Categorical features were converted into numerical format:
+To improve clustering stability, values above the **99th percentile** were removed. After outlier removal, the dataset was reduced from **48,895 rows** to **46,460 rows**.
 
-- `Sex` and `Embarked` were encoded using one-hot encoding.
-- `Pclass` was encoded as an ordinal feature because passenger class has a ranked meaning.
+This step helped prevent extreme listings from dominating the distance calculations used in K-Means clustering.
 
-### 4. Train, Validation, and Test Split
+### 4. Correlation Check
 
-The dataset was split into:
+A correlation heatmap was used to check relationships between numerical features. The analysis showed that dimensionality reduction was not required because the dataset contained a small number of selected features and did not show severe multicollinearity.
 
-- 70% training set
-- 15% validation set
-- 15% testing set
+### 5. Encoding Categorical Variables
 
-### 5. Feature Scaling
+Categorical variables were converted into numerical form using **OneHotEncoder**:
 
-Min-max scaling was applied to numerical features that were not one-hot encoded.
+- `neighbourhood_group`
+- `room_type`
 
-## Models Used
+This allowed categorical information to be included in the clustering algorithm.
 
-The following models were trained and evaluated:
+### 6. Feature Scaling
 
-1. K-Nearest Neighbors
-2. Decision Tree
-3. Linear Regression as a baseline classification approach
-4. Naïve Bayes
-5. Logistic Regression
-6. Support Vector Machine
+Because K-Means is distance-based, all features were scaled using **MinMaxScaler**. Scaling was necessary to prevent large-value variables, such as price or availability, from having too much influence on the clustering result.
 
-Some models used `GridSearchCV` for hyperparameter tuning, and several models used threshold optimization to improve the F1-score for the positive class.
+## Clustering Method
 
-## Model Performance
+The project used **K-Means clustering**, implemented step by step instead of only relying on a built-in model.
 
-The project used **F1-score for class 1**, meaning the survived class, as the main evaluation metric. This metric was chosen because it balances precision and recall and focuses on how well the model identifies survivors.
+The clustering process included:
 
-| Model | Main Tuning / Method | F1-Score for Survived Class |
-|---|---|---:|
-| K-Nearest Neighbors | Best K = 3 | 0.727 |
-| Decision Tree | Best max depth = 3 | 0.785 |
-| Linear Regression | Threshold = 0.5 | 0.748 |
-| Naïve Bayes | Optimized threshold = 0.462 | 0.724 |
-| Logistic Regression | Best C = 10, optimized threshold = 0.588 | 0.750 |
-| Support Vector Machine | C = 0.1, RBF kernel, optimized threshold = 0.175 | 0.730 |
+1. Scaling the data
+2. Initializing random centroids
+3. Assigning each data point to the nearest centroid
+4. Updating centroids based on cluster means
+5. Repeating the process until the centroids stopped changing
 
-## Final Model Selection
+This manual implementation helped demonstrate the logic behind how K-Means works.
 
-The **Decision Tree model** was selected as the final model because it achieved the highest F1-score of **0.785** for the survived class. This means it provided the best balance between precision and recall compared with the other models.
+## Choosing the Number of Clusters
 
-## Key Findings
+The **Elbow Method** was used to compare different values of `k` from 2 to 9. The Sum of Squared Errors (SSE) was calculated for each value of `k`.
 
-The analysis showed that survival was strongly influenced by several important features:
+Based on the elbow plot, the final number of clusters was selected as:
 
-- **Sex:** Female passengers had a much higher survival rate.
-- **Passenger class:** Passengers in higher classes had better survival outcomes.
-- **Fare:** Higher fare values were associated with better survival chances.
-- **Age and family-related variables:** Features such as `Age`, `SibSp`, and `Parch` also helped the models separate survivors from non-survivors.
+```text
+k = 7
+```
 
-These patterns show that demographic and socioeconomic factors played an important role in survival outcomes.
+The final model converged successfully and produced a final SSE of:
+
+```text
+23780.87
+```
+
+## Final Cluster Distribution
+
+The final 7 clusters had the following number of listings:
+
+| Cluster | Number of Listings |
+|---|---:|
+| 6 | 13,321 |
+| 1 | 12,931 |
+| 4 | 6,424 |
+| 0 | 5,666 |
+| 5 | 3,056 |
+| 3 | 3,017 |
+| 2 | 2,045 |
+
+The cluster sizes show that some listing types are very common in the market, while others represent smaller and more specific groups of Airbnb listings.
+
+## Visualization
+
+Principal Component Analysis (PCA) was used only for visualization. The high-dimensional clustering result was projected into two dimensions so the clusters and centroids could be displayed on a scatter plot.
+
+PCA was not used as the main clustering input. It was mainly used to make the final clustering result easier to understand visually.
+
+## Main Findings
+
+The clustering analysis suggests that Airbnb listings can be grouped into several meaningful segments based on listing behavior and listing characteristics.
+
+The most important factors used to separate listings include:
+
+- Location group
+- Room type
+- Price level
+- Minimum night requirement
+- Review activity
+- Host listing count
+- Availability during the year
+
+The larger clusters likely represent common Airbnb listing patterns, while the smaller clusters may represent more specialized listing types, such as listings with unusual availability, higher prices, more review activity, or hosts managing many listings.
 
 ## Conclusion
 
-This project successfully developed and compared multiple machine learning models for Titanic survival prediction. After cleaning the data, transforming features, tuning models, and evaluating performance, the Decision Tree model was chosen as the best-performing model.
+This project demonstrates how unsupervised machine learning can be used to segment Airbnb listings without a predefined target variable. By applying K-Means clustering, the dataset was divided into 7 groups of listings with similar characteristics.
 
-Overall, the project demonstrates the full machine learning workflow, including:
+The analysis shows that clustering can help identify different types of Airbnb listings in the market. These insights can be useful for understanding customer options, comparing listing strategies, and supporting business decisions related to pricing, availability, and market segmentation.
 
-- Data exploration
-- Missing value treatment
-- Feature selection
-- Encoding and scaling
-- Model training
-- Hyperparameter tuning
-- Model evaluation and selection
+## Tools and Libraries Used
 
-The final result suggests that a simple and interpretable model such as Decision Tree can perform strongly on this dataset when the data is properly prepared.
+- Python
+- Pandas
+- NumPy
+- Matplotlib
+- Seaborn
+- Scikit-learn
+  - OneHotEncoder
+  - MinMaxScaler
+  - PCA
 
-## Tools and Libraries
+## Future Improvements
 
-This project was completed using Python and common data science libraries, including:
+Future improvements could include:
 
-- pandas
-- numpy
-- matplotlib
-- seaborn
-- scikit-learn
+- Using built-in `KMeans` from Scikit-learn for comparison
+- Adding cluster profiling to describe each cluster in business terms
+- Testing other clustering methods such as DBSCAN or Hierarchical Clustering
+- Including latitude and longitude to improve geographic clustering
+- Creating visual summaries of average price, availability, and room type distribution by cluster
+- Evaluating cluster quality using silhouette score
 
 ## Repository Structure
 
 ```text
-titanic-survival-prediction/
+airbnb-clustering-analysis/
 │
 ├── README.md
-├── Titanic_Report.pdf
-├── notebooks/
-│   └── Titanic_Project.ipynb
-└── data/
-    └── titanic.csv
+├── airbnb_clustering.ipynb
+├── airbnb.csv
+└── requirements.txt
 ```
 
-## Future Improvements
+## How to Run
 
-Possible future improvements include:
+1. Clone the repository.
+2. Install the required Python libraries.
+3. Place the Airbnb dataset in the project folder.
+4. Open the notebook and run all cells.
 
-- Testing more advanced models such as Random Forest, Gradient Boosting, or XGBoost.
-- Adding feature engineering, such as family size or title extraction from passenger names.
-- Comparing model performance using additional metrics such as ROC-AUC and accuracy.
-- Creating visual dashboards to communicate survival patterns more clearly.
+```bash
+pip install pandas numpy matplotlib seaborn scikit-learn
+```
+
