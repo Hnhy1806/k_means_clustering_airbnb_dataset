@@ -13,6 +13,8 @@ The dataset contains **48,895 Airbnb listings** with 16 original columns, includ
 Key variables used for clustering:
 
 - `neighbourhood_group`
+- `latitude`
+- `longitude`
 - `room_type`
 - `price`
 - `minimum_nights`
@@ -21,7 +23,7 @@ Key variables used for clustering:
 - `calculated_host_listings_count`
 - `availability_365`
 
-These features were selected because they describe important listing characteristics such as where the listing is located, what type of accommodation it offers, how expensive it is, how active it is in reviews, how many listings the host manages, and how often the listing is available.
+These features were selected because they describe important listing characteristics such as where the listing is located (including precise geographic coordinates), what type of accommodation it offers, how expensive it is, how active it is in reviews, how many listings the host manages, and how often the listing is available.
 
 ## Data Cleaning and Preprocessing
 
@@ -35,7 +37,7 @@ Other missing columns such as `name`, `host_name`, and `last_review` were not us
 
 ### 2. Feature Selection
 
-Only clustering-relevant columns were selected. Identification columns and text-based columns were excluded because they do not directly help measure similarity between listings.
+Only clustering-relevant columns were selected. Identification columns and text-based columns were excluded because they do not directly help measure similarity between listings. `latitude` and `longitude` were included to capture geographic patterns more precisely than `neighbourhood_group` alone.
 
 ### 3. Outlier Removal
 
@@ -57,7 +59,7 @@ A correlation heatmap was used to check relationships between numerical features
 
 ### 5. Encoding Categorical Variables
 
-Categorical variables were converted into numerical form using **OneHotEncoder**:
+Categorical variables were converted into numerical form using **OneHotEncoder** (with `drop='first'` to avoid redundant columns):
 
 - `neighbourhood_group`
 - `room_type`
@@ -82,20 +84,31 @@ The clustering process included:
 
 This manual implementation helped demonstrate the logic behind how K-Means works.
 
+### Handling Empty Clusters
+
+The centroid-update step guards against empty clusters: if a random initialization produces a centroid that ends up with no points assigned to it, that cluster is reseeded with a random data point instead of being silently dropped. Without this guard, an empty cluster would shift the cluster indexing and corrupt the SSE calculation.
+
+### Multiple Random Initializations
+
+A single random initialization can cause K-Means to converge to a poor local minimum. To address this, each run of K-Means is repeated for **10 random initializations** (`n_init=10`), and the run with the lowest SSE is kept. This is applied consistently both when comparing values of `k` and when fitting the final model.
+
 ## Choosing the Number of Clusters
 
-The **Elbow Method** was used to compare different values of `k` from 2 to 9. The Sum of Squared Errors (SSE) was calculated for each value of `k`.
+Two metrics were compared across `k = 2` to `k = 9`:
 
-Based on the elbow plot, the final number of clusters was selected as:
+- **Elbow Method** — Sum of Squared Errors (SSE) for each value of `k`
+- **Silhouette Score** — computed on a random sample of up to 5,000 points per `k` (full-dataset silhouette scoring is computationally expensive on ~46,000 rows)
+
+Based on the combination of the elbow plot and the silhouette scores, the final number of clusters was selected as:
 
 ```text
 k = 7
 ```
 
-The final model converged successfully and produced a final SSE of:
+The final model was fit using 10 random initializations and converged with a final SSE of:
 
 ```text
-23780.87
+13137.72
 ```
 
 ## Final Cluster Distribution
@@ -104,15 +117,37 @@ The final 7 clusters had the following number of listings:
 
 | Cluster | Number of Listings |
 |---|---:|
-| 6 | 13,321 |
-| 1 | 12,931 |
-| 4 | 6,424 |
-| 0 | 5,666 |
-| 5 | 3,056 |
-| 3 | 3,017 |
-| 2 | 2,045 |
+| 3 | 9,878 |
+| 2 | 9,624 |
+| 1 | 8,512 |
+| 5 | 7,660 |
+| 6 | 4,032 |
+| 0 | 3,982 |
+| 4 | 2,772 |
 
-The cluster sizes show that some listing types are very common in the market, while others represent smaller and more specific groups of Airbnb listings.
+## Cluster Profiling
+
+Each cluster was profiled using the **original, unscaled** feature values (rather than the scaled values used for clustering) to make the results interpretable in business terms.
+
+| Cluster | Avg. Price ($) | Avg. Min. Nights | Avg. Reviews | Avg. Reviews/Month | Avg. Host Listings | Avg. Availability (days) | Count | Dominant Borough | Dominant Room Type |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|
+| 0 | 233.75 | 15.47 | 23.96 | 1.01 | 19.72 | 282.25 | 3,982 | Manhattan | Entire home/apt |
+| 1 | 198.60 | 4.52 | 14.26 | 0.77 | 1.51 | 25.80 | 8,512 | Manhattan | Entire home/apt |
+| 2 | 161.09 | 5.38 | 24.62 | 1.05 | 1.98 | 97.98 | 9,624 | Brooklyn | Entire home/apt |
+| 3 | 72.13 | 4.68 | 18.69 | 0.91 | 2.55 | 98.56 | 9,878 | Brooklyn | Private room |
+| 4 | 131.15 | 4.20 | 24.36 | 1.42 | 1.88 | 139.84 | 2,772 | Queens | Entire home/apt |
+| 5 | 105.93 | 4.38 | 22.22 | 1.03 | 2.88 | 98.78 | 7,660 | Manhattan | Private room |
+| 6 | 67.11 | 4.44 | 21.72 | 1.24 | 5.02 | 154.65 | 4,032 | Queens | Private room |
+
+Based on these profiles, the clusters can be interpreted as:
+
+- **Cluster 0 — Premium, professionally managed listings (Manhattan):** highest average price and host listing count, long minimum-stay requirements, and high availability, suggesting hosts who manage many properties as a business.
+- **Cluster 1 — High-price, low-availability entire homes (Manhattan):** the second-highest price but the lowest availability and fewest reviews, consistent with owner-occupied or infrequently rented listings.
+- **Cluster 2 — Mid-range entire homes (Brooklyn):** moderate price and availability, the second-largest segment.
+- **Cluster 3 — Budget private rooms (Brooklyn):** the largest segment overall, with the lowest minimum-stay requirement among entire-home clusters and low price.
+- **Cluster 4 — High-engagement entire homes (Queens):** smallest cluster, but with the highest reviews-per-month, suggesting frequently booked, actively reviewed listings.
+- **Cluster 5 — Budget private rooms (Manhattan):** private rooms in Manhattan at a lower price point than the entire-home clusters in the same borough.
+- **Cluster 6 — Budget private rooms with multi-listing hosts (Queens):** lowest average price, but a notably higher average host listing count than the other private-room clusters, suggesting smaller-scale hosts managing a handful of budget listings.
 
 ## Visualization
 
@@ -122,25 +157,24 @@ PCA was not used as the main clustering input. It was mainly used to make the fi
 
 ## Main Findings
 
-The clustering analysis suggests that Airbnb listings can be grouped into several meaningful segments based on listing behavior and listing characteristics.
+The clustering analysis shows that Airbnb listings split into segments that align closely with **price tier, room type, and borough**, with host listing count and availability further distinguishing professionally managed listings from individually hosted ones.
 
 The most important factors used to separate listings include:
 
-- Location group
+- Location (borough, latitude, longitude)
 - Room type
 - Price level
-- Minimum night requirement
-- Review activity
-- Host listing count
+- Host listing count (a proxy for professional vs. individual hosts)
 - Availability during the year
+- Review activity
 
-The larger clusters likely represent common Airbnb listing patterns, while the smaller clusters may represent more specialized listing types, such as listings with unusual availability, higher prices, more review activity, or hosts managing many listings.
+The two largest clusters (3 and 2) represent budget-to-mid-range listings in Brooklyn, together accounting for roughly 42% of all listings after outlier removal. The smallest cluster (4) represents a niche group of highly active, frequently reviewed entire-home listings in Queens.
 
 ## Conclusion
 
-This project demonstrates how unsupervised machine learning can be used to segment Airbnb listings without a predefined target variable. By applying K-Means clustering, the dataset was divided into 7 groups of listings with similar characteristics.
+This project demonstrates how unsupervised machine learning can be used to segment Airbnb listings without a predefined target variable. By applying K-Means clustering — with safeguards against empty clusters and multiple random initializations to avoid poor local minima — the dataset was divided into 7 groups of listings with distinct, interpretable characteristics.
 
-The analysis shows that clustering can help identify different types of Airbnb listings in the market. These insights can be useful for understanding customer options, comparing listing strategies, and supporting business decisions related to pricing, availability, and market segmentation.
+The cluster profiling step ties each segment back to concrete, real-world listing traits (price, borough, room type, host scale, and availability), turning the clustering output into insights that can support business decisions such as pricing strategy, identifying professional hosts, and understanding market segmentation by borough.
 
 ## Tools and Libraries Used
 
@@ -153,14 +187,14 @@ The analysis shows that clustering can help identify different types of Airbnb l
   - OneHotEncoder
   - MinMaxScaler
   - PCA
+  - `silhouette_score`
 
 ## Future Improvements
 
 Future improvements could include:
 
 - Using built-in `KMeans` from Scikit-learn for comparison
-- Adding cluster profiling to describe each cluster in business terms
 - Testing other clustering methods such as DBSCAN or Hierarchical Clustering
-- Including latitude and longitude to improve geographic clustering
-- Creating visual summaries of average price, availability, and room type distribution by cluster
-- Evaluating cluster quality using silhouette scores
+- Plotting cluster centers on an actual map using `latitude`/`longitude` to visualize geographic segmentation directly
+- Creating visual summaries (bar charts) of average price, availability, and room type distribution by cluster, to complement the cluster profiling table
+- Tuning `n_init` and comparing against k-means++-style initialization instead of uniform random sampling
